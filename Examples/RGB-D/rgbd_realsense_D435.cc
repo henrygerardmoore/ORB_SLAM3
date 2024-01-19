@@ -134,7 +134,6 @@ int main(int argc, char **argv) {
             ++index;
             if (index == 1) {
                 sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1);
-                // sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_LIMIT,50000);
                 sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 1); // emitter on for depth information
             }
             // std::cout << "  " << index << " : " << sensor.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
@@ -164,22 +163,9 @@ int main(int argc, char **argv) {
     // cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 480, RS2_FORMAT_Y8, 30);
     cfg.enable_stream(RS2_STREAM_DEPTH,640, 480, RS2_FORMAT_Z16, 30);
 
-    // IMU stream
-    cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F); //, 250); // 63
-    cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F); //, 400);
-
     // IMU callback
     std::mutex imu_mutex;
     std::condition_variable cond_image_rec;
-
-    vector<double> v_accel_timestamp;
-    vector<rs2_vector> v_accel_data;
-    vector<double> v_gyro_timestamp;
-    vector<rs2_vector> v_gyro_data;
-
-    rs2_vector current_accel_data;
-    vector<double> v_accel_timestamp_sync;
-    vector<rs2_vector> v_accel_data_sync;
 
     cv::Mat imCV, depthCV;
     int width_img, height_img;
@@ -227,55 +213,17 @@ int main(int argc, char **argv) {
             //Align depth and rgb takes long time, move it out of the interruption to avoid losing IMU measurements
             fsSLAM = fs;
 
-            /*
-            //Get processed aligned frame
-            auto processed = align.process(fs);
-
-
-            // Trying to get both other and aligned depth frames
-            rs2::video_frame color_frame = processed.first(align_to);
-            rs2::depth_frame depth_frame = processed.get_depth_frame();
-            //If one of them is unavailable, continue iteration
-            if (!depth_frame || !color_frame) {
-                cout << "Not synchronized depth and image\n";
-                return;
-            }
-
-
-            imCV = cv::Mat(cv::Size(width_img, height_img), CV_8UC3, (void*)(color_frame.get_data()), cv::Mat::AUTO_STEP);
-            depthCV = cv::Mat(cv::Size(width_img, height_img), CV_16U, (void*)(depth_frame.get_data()), cv::Mat::AUTO_STEP);
-
-            cv::Mat depthCV_8U;
-            depthCV.convertTo(depthCV_8U,CV_8U,0.01);
-            cv::imshow("depth image", depthCV_8U);*/
-
             timestamp_image = fs.get_timestamp()*1e-3;
             image_ready = true;
-
-            while(v_gyro_timestamp.size() > v_accel_timestamp_sync.size())
-            {
-                int index = v_accel_timestamp_sync.size();
-                double target_time = v_gyro_timestamp[index];
-
-                v_accel_data_sync.push_back(current_accel_data);
-                v_accel_timestamp_sync.push_back(target_time);
-            }
 
             lock.unlock();
             cond_image_rec.notify_all();
         }
     };
 
-
-
     pipe_profile = pipe.start(cfg, imu_callback);
 
-
-
     rs2::stream_profile cam_stream = pipe_profile.get_stream(RS2_STREAM_COLOR);
-
-
-
 
     rs2_intrinsics intrinsics_cam = cam_stream.as<rs2::video_stream_profile>().get_intrinsics();
     width_img = intrinsics_cam.width;
